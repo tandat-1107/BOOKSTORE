@@ -1,841 +1,1040 @@
-// ==========================================
-// BOOKSTORE - BOOKS.JS
-// Quản lý danh sách sách
-// Tìm kiếm - Lọc - Sắp xếp - Phân trang
-// ==========================================
+document.addEventListener("DOMContentLoaded", () => {
 
-let allBooks = [];
-let filteredBooks = [];
+    // =========================================================
+    // CONFIG
+    // =========================================================
 
-let currentPage = 1;
-const booksPerPage = 6;
+    const DATA_URL = "../data/books.json";
 
+    let allBooks = [];
+    let filteredBooks = [];
 
-// ==========================================
-// ĐƯỜNG DẪN ẢNH
-// ==========================================
-
-function getBookImage(book) {
-
-    const imageMap = {
-        1: "dac-nhan-tam.jpg",
-        2: "nha-gia-kim.jpg",
-        3: "hoa-vang.jpg",
-        4: "atomic-habits.jpg",
-        5: "mat-biec.jpg",
-        6: "tuoi-tre.jpg",
-        7: "tu-duy.jpg",
-        8: "de-men.jpg",
-        9: "khong-gia-dinh.jpg",
-        10: "sapiens.jpg",
-        11: "di-tim-le-song.jpg",
-        12: "luoc-su-thoi-gian.jpg"
-    };
-
-    const fileName = imageMap[Number(book.id)] || book.image;
-
-    return `/assets/images/${fileName}`;
-}
+    let currentPage = 1;
+    const booksPerPage = 6;
 
 
-// ==========================================
-// LOAD BOOKS.JSON
-// ==========================================
+    // =========================================================
+    // DOM
+    // =========================================================
 
-async function loadBooks() {
+    const bookList = document.getElementById("book-list");
+    const resultCount = document.getElementById("result-count");
 
-    try {
+    const searchInput = document.getElementById("search-input");
+    const categoryFilter = document.getElementById("category-filter");
+    const sortFilter = document.getElementById("sort-filter");
 
-        const response = await fetch("../data/books.json");
+    const pagination = document.getElementById("pagination");
 
-        if (!response.ok) {
-            throw new Error("Không thể tải books.json");
+
+    // =========================================================
+    // HÀM XỬ LÝ ĐƯỜNG DẪN ẢNH
+    // =========================================================
+
+    function getBookImage(image) {
+
+        if (!image) {
+            return "../assets/images/default-book.jpg";
         }
 
-        const books = await response.json();
+        image = String(image).trim();
 
-        allBooks = books;
-        filteredBooks = [...allBooks];
+        // Ảnh từ internet
+        if (
+            image.startsWith("http://") ||
+            image.startsWith("https://")
+        ) {
+            return image;
+        }
 
-        createCategoryFilter();
+        // Nếu JSON đã có ../assets/
+        if (image.startsWith("../assets/")) {
+            return image;
+        }
+
+        // Nếu JSON có /assets/
+        if (image.startsWith("/assets/")) {
+            return ".." + image;
+        }
+
+        // Nếu JSON có assets/images/...
+        if (image.startsWith("assets/")) {
+            return "../" + image;
+        }
+
+        // Nếu JSON chỉ có tên file
+        return "../assets/images/" + image;
+    }
+
+
+    // =========================================================
+    // LOAD DATA
+    // =========================================================
+
+    async function loadBooks() {
+
+        try {
+
+            const response = await fetch(DATA_URL);
+
+            if (!response.ok) {
+                throw new Error(
+                    "Không thể tải books.json: " + response.status
+                );
+            }
+
+            const data = await response.json();
+
+            // Hỗ trợ cả:
+            // [
+            //   {...}
+            // ]
+            //
+            // hoặc:
+            // {
+            //   "books": [...]
+            // }
+
+            if (Array.isArray(data)) {
+                allBooks = data;
+            }
+            else if (Array.isArray(data.books)) {
+                allBooks = data.books;
+            }
+            else {
+                allBooks = [];
+            }
+
+            filteredBooks = [...allBooks];
+
+            createCategoryOptions();
+
+            applyFilters();
+
+        }
+        catch (error) {
+
+            console.error("Lỗi tải dữ liệu sách:", error);
+
+            if (bookList) {
+
+                bookList.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Không thể tải danh sách sách.
+                            <br>
+                            <small>${error.message}</small>
+                        </div>
+                    </div>
+                `;
+
+            }
+
+        }
+
+    }
+
+
+    // =========================================================
+    // TẠO DANH SÁCH THỂ LOẠI
+    // =========================================================
+
+    function createCategoryOptions() {
+
+        if (!categoryFilter) {
+            return;
+        }
+
+        const categories = [];
+
+        allBooks.forEach(book => {
+
+            const category =
+                book.category ||
+                book.genre ||
+                book.type ||
+                "";
+
+            if (
+                category &&
+                !categories.includes(category)
+            ) {
+                categories.push(category);
+            }
+
+        });
+
+        categories.sort((a, b) =>
+            String(a).localeCompare(String(b), "vi")
+        );
+
+        categoryFilter.innerHTML = `
+            <option value="">Tất cả thể loại</option>
+        `;
+
+        categories.forEach(category => {
+
+            const option = document.createElement("option");
+
+            option.value = category;
+            option.textContent = category;
+
+            categoryFilter.appendChild(option);
+
+        });
+
+    }
+
+
+    // =========================================================
+    // LỌC SÁCH
+    // =========================================================
+
+    function applyFilters() {
+
+        let books = [...allBooks];
+
+        // -------------------------
+        // TÌM KIẾM
+        // -------------------------
+
+        const keyword =
+            searchInput?.value
+                ?.trim()
+                .toLowerCase() || "";
+
+        if (keyword) {
+
+            books = books.filter(book => {
+
+                const title =
+                    String(
+                        book.title ||
+                        book.name ||
+                        ""
+                    ).toLowerCase();
+
+                const author =
+                    String(
+                        book.author ||
+                        ""
+                    ).toLowerCase();
+
+                return (
+                    title.includes(keyword) ||
+                    author.includes(keyword)
+                );
+
+            });
+
+        }
+
+
+        // -------------------------
+        // THỂ LOẠI
+        // -------------------------
+
+        const category =
+            categoryFilter?.value || "";
+
+        if (category) {
+
+            books = books.filter(book => {
+
+                const bookCategory =
+                    book.category ||
+                    book.genre ||
+                    book.type ||
+                    "";
+
+                return bookCategory === category;
+
+            });
+
+        }
+
+
+        // -------------------------
+        // SẮP XẾP
+        // -------------------------
+
+        const sort =
+            sortFilter?.value || "";
+
+        switch (sort) {
+
+            case "price-asc":
+
+                books.sort((a, b) =>
+                    getPrice(a) - getPrice(b)
+                );
+
+                break;
+
+
+            case "price-desc":
+
+                books.sort((a, b) =>
+                    getPrice(b) - getPrice(a)
+                );
+
+                break;
+
+
+            case "name":
+
+                books.sort((a, b) =>
+                    getTitle(a).localeCompare(
+                        getTitle(b),
+                        "vi"
+                    )
+                );
+
+                break;
+
+
+            case "rating":
+
+                books.sort((a, b) =>
+                    getRating(b) - getRating(a)
+                );
+
+                break;
+
+        }
+
+
+        filteredBooks = books;
+
+        currentPage = 1;
 
         renderBooks();
 
-    } catch (error) {
+    }
 
-        console.error("Lỗi tải dữ liệu sách:", error);
 
-        const bookList = document.querySelector("#book-list");
+    // =========================================================
+    // LẤY THÔNG TIN SÁCH
+    // =========================================================
 
-        if (bookList) {
+    function getTitle(book) {
 
-            bookList.innerHTML = `
-                <div class="col-12">
-                    <div class="alert alert-danger">
-                        <i class="bi bi-exclamation-triangle"></i>
-                        Không thể tải danh sách sách.
-                        <br>
-                        <small>
-                            Kiểm tra lại file data/books.json
-                        </small>
-                    </div>
-                </div>
-            `;
+        return (
+            book.title ||
+            book.name ||
+            "Sách chưa có tên"
+        );
+
+    }
+
+
+    function getAuthor(book) {
+
+        return (
+            book.author ||
+            "Đang cập nhật"
+        );
+
+    }
+
+
+    function getCategory(book) {
+
+        return (
+            book.category ||
+            book.genre ||
+            book.type ||
+            "Khác"
+        );
+
+    }
+
+
+    function getPrice(book) {
+
+        const price =
+            book.price ??
+            book.salePrice ??
+            book.currentPrice ??
+            0;
+
+        return Number(
+            String(price)
+                .replace(/[^\d]/g, "")
+        ) || 0;
+
+    }
+
+
+    function getOriginalPrice(book) {
+
+        const price =
+            book.originalPrice ??
+            book.oldPrice ??
+            book.listPrice ??
+            book.original_price ??
+            null;
+
+        if (price === null) {
+            return null;
         }
-    }
-}
 
+        return Number(
+            String(price)
+                .replace(/[^\d]/g, "")
+        ) || null;
 
-// ==========================================
-// TẠO DANH SÁCH THỂ LOẠI
-// ==========================================
-
-function createCategoryFilter() {
-
-    const select = document.querySelector("#category-filter");
-
-    if (!select) return;
-
-    const categories = [
-        ...new Set(
-            allBooks
-                .map(book => book.category)
-                .filter(category => category)
-        )
-    ];
-
-    select.innerHTML = `
-        <option value="">Tất cả thể loại</option>
-    `;
-
-    categories.forEach(category => {
-
-        const option = document.createElement("option");
-
-        option.value = category;
-        option.textContent = category;
-
-        select.appendChild(option);
-    });
-}
-
-
-// ==========================================
-// RENDER SÁCH
-// ==========================================
-
-function renderBooks() {
-
-    const container = document.querySelector("#book-list");
-
-    if (!container) {
-
-        console.error(
-            "Không tìm thấy #book-list trong books.html"
-        );
-
-        return;
-    }
-
-    container.innerHTML = "";
-
-    // --------------------------------------
-    // Không có sách
-    // --------------------------------------
-
-    if (filteredBooks.length === 0) {
-
-        container.innerHTML = `
-            <div class="col-12">
-                <div class="text-center py-5">
-
-                    <i
-                        class="bi bi-book"
-                        style="font-size: 60px; color: #b0b8c4;"
-                    ></i>
-
-                    <h4 class="mt-3">
-                        Không tìm thấy sách
-                    </h4>
-
-                    <p class="text-muted">
-                        Hãy thử từ khóa hoặc thể loại khác.
-                    </p>
-
-                </div>
-            </div>
-        `;
-
-        updateResultCount();
-
-        renderPagination();
-
-        return;
     }
 
 
-    // --------------------------------------
-    // Tính phân trang
-    // --------------------------------------
-
-    const start =
-        (currentPage - 1) * booksPerPage;
-
-    const end =
-        start + booksPerPage;
-
-    const booksToShow =
-        filteredBooks.slice(start, end);
-
-
-    // --------------------------------------
-    // Render từng sách
-    // --------------------------------------
-
-    booksToShow.forEach(book => {
-
-        const image = getBookImage(book);
-
-        const col = document.createElement("div");
-
-        col.className = "col-md-6 col-xl-4";
-
-
-        col.innerHTML = `
-
-            <div class="book-card h-100">
-
-                <div class="book-image">
-
-                    <img
-                        src="${image}"
-                        alt="${escapeHtml(book.title)}"
-                        onerror="
-                            this.onerror=null;
-                            this.src='/assets/images/hoa-vang.jpg';
-                        "
-                    >
-
-                </div>
-
-
-                <div class="book-info">
-
-                    <div class="book-category">
-                        ${escapeHtml(book.category || "Sách")}
-                    </div>
-
-
-                    <h3 class="book-title">
-                        ${escapeHtml(book.title)}
-                    </h3>
-
-
-                    <p class="book-author">
-                        <i class="bi bi-person"></i>
-                        ${escapeHtml(
-                            book.author || "Đang cập nhật"
-                        )}
-                    </p>
-
-
-                    <div class="book-rating">
-
-                        <span class="stars">
-                            ★
-                        </span>
-
-                        <span>
-                            ${book.rating || 0}
-                        </span>
-
-                    </div>
-
-
-                    <div class="book-price">
-
-                        <strong>
-                            ${formatPrice(book.price)}
-                        </strong>
-
-                        ${
-                            book.originalPrice
-                            ? `
-                                <del>
-                                    ${formatPrice(
-                                        book.originalPrice
-                                    )}
-                                </del>
-                            `
-                            : ""
-                        }
-
-                    </div>
-
-
-                    <div class="book-actions">
-
-                        <a
-                            href="book-detail.html?id=${book.id}"
-                            class="btn btn-outline-primary"
-                        >
-                            <i class="bi bi-eye"></i>
-                            Chi tiết
-                        </a>
-
-
-                        <button
-                            class="btn btn-primary"
-                            onclick="addToCart(${book.id})"
-                        >
-                            <i class="bi bi-cart-plus"></i>
-                            Thêm giỏ
-                        </button>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        `;
-
-        container.appendChild(col);
-    });
-
-
-    updateResultCount();
-
-    renderPagination();
-}
-
-
-// ==========================================
-// CẬP NHẬT SỐ LƯỢNG
-// ==========================================
-
-function updateResultCount() {
-
-    const resultCount =
-        document.querySelector("#result-count");
-
-    if (!resultCount) return;
-
-    resultCount.textContent =
-        filteredBooks.length;
-}
-
-
-// ==========================================
-// PHÂN TRANG
-// ==========================================
-
-function renderPagination() {
-
-    const pagination =
-        document.querySelector("#pagination");
-
-    if (!pagination) return;
-
-    pagination.innerHTML = "";
-
-    const totalPages =
-        Math.ceil(
-            filteredBooks.length / booksPerPage
-        );
-
-    if (totalPages <= 1) {
-        return;
-    }
-
-
-    // Nút Previous
-
-    const previous = document.createElement("button");
-
-    previous.className =
-        "btn btn-outline-primary";
-
-    previous.innerHTML =
-        `<i class="bi bi-chevron-left"></i>`;
-
-    previous.disabled =
-        currentPage === 1;
-
-    previous.onclick = () => {
-
-        if (currentPage > 1) {
-
-            currentPage--;
-
-            renderBooks();
-
-            window.scrollTo({
-                top: 0,
-                behavior: "smooth"
-            });
-        }
-    };
-
-    pagination.appendChild(previous);
-
-
-    // Số trang
-
-    for (
-        let page = 1;
-        page <= totalPages;
-        page++
-    ) {
-
-        const button =
-            document.createElement("button");
-
-        button.className =
-            page === currentPage
-            ? "btn btn-primary"
-            : "btn btn-outline-primary";
-
-        button.textContent = page;
-
-        button.onclick = () => {
-
-            currentPage = page;
-
-            renderBooks();
-
-            window.scrollTo({
-                top: 0,
-                behavior: "smooth"
-            });
-        };
-
-        pagination.appendChild(button);
-    }
-
-
-    // Nút Next
-
-    const next = document.createElement("button");
-
-    next.className =
-        "btn btn-outline-primary";
-
-    next.innerHTML =
-        `<i class="bi bi-chevron-right"></i>`;
-
-    next.disabled =
-        currentPage === totalPages;
-
-    next.onclick = () => {
-
-        if (currentPage < totalPages) {
-
-            currentPage++;
-
-            renderBooks();
-
-            window.scrollTo({
-                top: 0,
-                behavior: "smooth"
-            });
-        }
-    };
-
-    pagination.appendChild(next);
-}
-
-
-// ==========================================
-// TÌM KIẾM
-// ==========================================
-
-function searchBooks(keyword) {
-
-    keyword =
-        keyword
-            .trim()
-            .toLowerCase();
-
-
-    filteredBooks =
-        allBooks.filter(book => {
-
-            const title =
-                (book.title || "")
-                    .toLowerCase();
-
-            const author =
-                (book.author || "")
-                    .toLowerCase();
-
-            const category =
-                (book.category || "")
-                    .toLowerCase();
-
-
-            return (
-                title.includes(keyword) ||
-                author.includes(keyword) ||
-                category.includes(keyword)
-            );
-        });
-
-
-    currentPage = 1;
-
-    renderBooks();
-}
-
-
-// ==========================================
-// LỌC THỂ LOẠI
-// ==========================================
-
-function filterByCategory(category) {
-
-    if (!category) {
-
-        filteredBooks =
-            [...allBooks];
-
-    } else {
-
-        filteredBooks =
-            allBooks.filter(
-                book =>
-                    book.category === category
-            );
-    }
-
-
-    currentPage = 1;
-
-    renderBooks();
-}
-
-
-// ==========================================
-// SẮP XẾP
-// ==========================================
-
-function sortBooks(type) {
-
-    filteredBooks =
-        [...filteredBooks];
-
-
-    switch (type) {
-
-        case "price-asc":
-
-            filteredBooks.sort(
-                (a, b) =>
-                    Number(a.price) -
-                    Number(b.price)
-            );
-
-            break;
-
-
-        case "price-desc":
-
-            filteredBooks.sort(
-                (a, b) =>
-                    Number(b.price) -
-                    Number(a.price)
-            );
-
-            break;
-
-
-        case "name":
-
-            filteredBooks.sort(
-                (a, b) =>
-                    (a.title || "")
-                        .localeCompare(
-                            b.title || "",
-                            "vi"
-                        )
-            );
-
-            break;
-
-
-        case "rating":
-
-            filteredBooks.sort(
-                (a, b) =>
-                    Number(b.rating || 0) -
-                    Number(a.rating || 0)
-            );
-
-            break;
-
-
-        default:
-
-            filteredBooks =
-                [...filteredBooks];
-
-            break;
-    }
-
-
-    currentPage = 1;
-
-    renderBooks();
-}
-
-
-// ==========================================
-// THÊM VÀO GIỎ
-// ==========================================
-
-function addToCart(bookId) {
-
-    const book =
-        allBooks.find(
-            item =>
-                Number(item.id) ===
-                Number(bookId)
-        );
-
-
-    if (!book) {
-
-        alert("Không tìm thấy sách!");
-
-        return;
-    }
-
-
-    let cart =
-        JSON.parse(
-            localStorage.getItem("cart") || "[]"
-        );
-
-
-    const existing =
-        cart.find(
-            item =>
-                Number(item.id) ===
-                Number(bookId)
-        );
-
-
-    if (existing) {
-
-        existing.quantity =
-            Number(existing.quantity || 0) + 1;
-
-    } else {
-
-        cart.push({
-
-            id: book.id,
-
-            title: book.title,
-
-            author: book.author,
-
-            price: book.price,
-
-            image: getBookImage(book),
-
-            quantity: 1
-        });
-    }
-
-
-    localStorage.setItem(
-        "cart",
-        JSON.stringify(cart)
-    );
-
-
-    updateCartCount();
-
-
-    alert(
-        `Đã thêm "${book.title}" vào giỏ hàng!`
-    );
-}
-
-
-// ==========================================
-// CẬP NHẬT GIỎ HÀNG
-// ==========================================
-
-function updateCartCount() {
-
-    const cart =
-        JSON.parse(
-            localStorage.getItem("cart") || "[]"
-        );
-
-
-    const count =
-        cart.reduce(
-            (total, item) =>
-                total +
-                Number(item.quantity || 0),
+    function getRating(book) {
+
+        return Number(
+            book.rating ||
+            book.rate ||
             0
         );
 
+    }
 
-    const badges =
-        document.querySelectorAll(
-            ".cart-count, #cart-count"
+
+    // =========================================================
+    // FORMAT GIÁ
+    // =========================================================
+
+    function formatPrice(price) {
+
+        return Number(price).toLocaleString(
+            "vi-VN"
+        ) + "đ";
+
+    }
+
+
+    // =========================================================
+    // RENDER SÁCH
+    // =========================================================
+
+    function renderBooks() {
+
+        if (!bookList) {
+            return;
+        }
+
+        if (resultCount) {
+
+            resultCount.textContent =
+                filteredBooks.length;
+
+        }
+
+
+        if (filteredBooks.length === 0) {
+
+            bookList.innerHTML = `
+                <div class="col-12">
+
+                    <div class="text-center py-5">
+
+                        <i
+                            class="bi bi-book"
+                            style="
+                                font-size:60px;
+                                color:#cbd5e1;
+                            "
+                        ></i>
+
+                        <h5 class="mt-3">
+                            Không tìm thấy sách
+                        </h5>
+
+                        <p class="text-muted">
+                            Hãy thử tìm kiếm với từ khóa khác.
+                        </p>
+
+                    </div>
+
+                </div>
+            `;
+
+            renderPagination();
+
+            return;
+
+        }
+
+
+        const start =
+            (currentPage - 1) * booksPerPage;
+
+        const end =
+            start + booksPerPage;
+
+        const pageBooks =
+            filteredBooks.slice(start, end);
+
+
+        bookList.innerHTML =
+            pageBooks
+                .map(book => createBookCard(book))
+                .join("");
+
+
+        renderPagination();
+
+        attachBookEvents();
+
+    }
+
+
+    // =========================================================
+    // TẠO CARD SÁCH
+    // =========================================================
+
+    function createBookCard(book) {
+
+        const title =
+            getTitle(book);
+
+        const author =
+            getAuthor(book);
+
+        const category =
+            getCategory(book);
+
+        const price =
+            getPrice(book);
+
+        const originalPrice =
+            getOriginalPrice(book);
+
+        const rating =
+            getRating(book);
+
+        const image =
+            getBookImage(
+                book.image ||
+                book.imageUrl ||
+                book.thumbnail ||
+                book.cover
+            );
+
+
+        const bookId =
+            book.id ??
+            book.bookId ??
+            "";
+
+
+        let oldPriceHTML = "";
+
+        if (
+            originalPrice &&
+            originalPrice > price
+        ) {
+
+            oldPriceHTML = `
+                <span
+                    class="text-muted text-decoration-line-through ms-2"
+                >
+                    ${formatPrice(originalPrice)}
+                </span>
+            `;
+
+        }
+
+
+        let ratingHTML = "";
+
+        if (rating > 0) {
+
+            ratingHTML = `
+                <div class="small text-muted mt-2">
+                    <i class="bi bi-star-fill text-warning"></i>
+                    ${rating}
+                </div>
+            `;
+
+        }
+
+
+        return `
+
+            <div class="col-md-6 col-xl-4">
+
+                <div
+                    class="card book-card h-100 border-0 shadow-sm"
+                    data-id="${bookId}"
+                >
+
+                    <div
+                        class="book-image-wrapper"
+                        style="
+                            height:300px;
+                            background:#f1f5f9;
+                            overflow:hidden;
+                        "
+                    >
+
+                        <img
+                            src="${image}"
+                            alt="${escapeHTML(title)}"
+                            class="book-image w-100 h-100"
+                            style="
+                                object-fit:cover;
+                                display:block;
+                            "
+                            onerror="
+                                this.onerror=null;
+                                this.src='../assets/images/default-book.jpg';
+                            "
+                        >
+
+                    </div>
+
+
+                    <div class="card-body d-flex flex-column">
+
+                        <div
+                            class="text-uppercase small fw-bold mb-2"
+                            style="color:#2563eb;"
+                        >
+                            ${escapeHTML(category)}
+                        </div>
+
+
+                        <h5
+                            class="card-title fw-bold"
+                            style="
+                                color:#102a5c;
+                                min-height:48px;
+                            "
+                        >
+                            ${escapeHTML(title)}
+                        </h5>
+
+
+                        <div
+                            class="small text-muted mt-2"
+                        >
+                            <i class="bi bi-person"></i>
+                            ${escapeHTML(author)}
+                        </div>
+
+
+                        ${ratingHTML}
+
+
+                        <div class="mt-auto pt-3">
+
+                            <div
+                                class="mb-3"
+                                style="
+                                    color:#dc2626;
+                                    font-size:20px;
+                                    font-weight:700;
+                                "
+                            >
+                                ${formatPrice(price)}
+
+                                ${oldPriceHTML}
+
+                            </div>
+
+
+                            <div
+                                class="d-flex gap-2"
+                            >
+
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-primary flex-grow-1 detail-btn"
+                                    data-id="${bookId}"
+                                >
+                                    <i class="bi bi-eye"></i>
+                                    Chi tiết
+                                </button>
+
+
+                                <button
+                                    type="button"
+                                    class="btn btn-primary flex-grow-1 add-cart-btn"
+                                    data-id="${bookId}"
+                                >
+                                    <i class="bi bi-cart-plus"></i>
+                                    Thêm giỏ
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        `;
+
+    }
+
+
+    // =========================================================
+    // ESCAPE HTML
+    // =========================================================
+
+    function escapeHTML(value) {
+
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+
+    }
+
+
+    // =========================================================
+    // EVENT CARD
+    // =========================================================
+
+    function attachBookEvents() {
+
+        // -------------------------
+        // CHI TIẾT
+        // -------------------------
+
+        document
+            .querySelectorAll(".detail-btn")
+            .forEach(button => {
+
+                button.addEventListener(
+                    "click",
+                    () => {
+
+                        const id =
+                            button.dataset.id;
+
+                        if (!id) {
+                            return;
+                        }
+
+                        window.location.href =
+                            `book-detail.html?id=${encodeURIComponent(id)}`;
+
+                    }
+                );
+
+            });
+
+
+        // -------------------------
+        // THÊM GIỎ HÀNG
+        // -------------------------
+
+        document
+            .querySelectorAll(".add-cart-btn")
+            .forEach(button => {
+
+                button.addEventListener(
+                    "click",
+                    () => {
+
+                        const id =
+                            button.dataset.id;
+
+                        const book =
+                            allBooks.find(
+                                item =>
+                                    String(
+                                        item.id ??
+                                        item.bookId
+                                    ) === String(id)
+                            );
+
+
+                        if (!book) {
+                            return;
+                        }
+
+
+                        addToCart(book);
+
+
+                        button.innerHTML = `
+                            <i class="bi bi-check-lg"></i>
+                            Đã thêm
+                        `;
+
+
+                        button.classList.remove(
+                            "btn-primary"
+                        );
+
+                        button.classList.add(
+                            "btn-success"
+                        );
+
+
+                        setTimeout(() => {
+
+                            button.innerHTML = `
+                                <i class="bi bi-cart-plus"></i>
+                                Thêm giỏ
+                            `;
+
+                            button.classList.remove(
+                                "btn-success"
+                            );
+
+                            button.classList.add(
+                                "btn-primary"
+                            );
+
+                        }, 1200);
+
+                    }
+                );
+
+            });
+
+    }
+
+
+    // =========================================================
+    // GIỎ HÀNG
+    // =========================================================
+
+    function addToCart(book) {
+
+        let cart = [];
+
+        try {
+
+            cart =
+                JSON.parse(
+                    localStorage.getItem("cart")
+                ) || [];
+
+        }
+        catch (error) {
+
+            cart = [];
+
+        }
+
+
+        const id =
+            book.id ??
+            book.bookId;
+
+
+        const existing =
+            cart.find(
+                item =>
+                    String(
+                        item.id ??
+                        item.bookId
+                    ) === String(id)
+            );
+
+
+        if (existing) {
+
+            existing.quantity =
+                Number(existing.quantity || 1) + 1;
+
+        }
+        else {
+
+            cart.push({
+
+                ...book,
+
+                quantity: 1
+
+            });
+
+        }
+
+
+        localStorage.setItem(
+            "cart",
+            JSON.stringify(cart)
         );
 
 
-    badges.forEach(badge => {
+        // Cho cart.js / header cập nhật
+        window.dispatchEvent(
+            new Event("cartUpdated")
+        );
 
-        badge.textContent = count;
-
-    });
-}
-
-
-// ==========================================
-// FORMAT GIÁ
-// ==========================================
-
-function formatPrice(price) {
-
-    if (
-        price === undefined ||
-        price === null ||
-        price === ""
-    ) {
-        return "0₫";
     }
 
 
-    return Number(price)
-        .toLocaleString("vi-VN") + "₫";
-}
+    // =========================================================
+    // PHÂN TRANG
+    // =========================================================
 
+    function renderPagination() {
 
-// ==========================================
-// ESCAPE HTML
-// ==========================================
+        if (!pagination) {
+            return;
+        }
 
-function escapeHtml(text) {
-
-    if (
-        text === undefined ||
-        text === null
-    ) {
-        return "";
-    }
-
-
-    return String(text)
-
-        .replace(/&/g, "&amp;")
-
-        .replace(/</g, "&lt;")
-
-        .replace(/>/g, "&gt;")
-
-        .replace(/"/g, "&quot;")
-
-        .replace(/'/g, "&#039;");
-}
-
-
-// ==========================================
-// KHỞI ĐỘNG
-// ==========================================
-
-document.addEventListener(
-    "DOMContentLoaded",
-    () => {
-
-        // Load sách
-        loadBooks();
-
-
-        // Cập nhật giỏ
-        updateCartCount();
-
-
-        // ----------------------------------
-        // Tìm kiếm
-        // ----------------------------------
-
-        const searchInput =
-            document.querySelector(
-                "#search-input"
+        const totalPages =
+            Math.ceil(
+                filteredBooks.length /
+                booksPerPage
             );
 
 
-        if (searchInput) {
+        if (totalPages <= 1) {
 
-            searchInput.addEventListener(
-                "input",
-                () => {
+            pagination.innerHTML = "";
 
-                    searchBooks(
-                        searchInput.value
-                    );
+            return;
 
-                }
-            );
         }
 
 
-        // ----------------------------------
-        // Thể loại
-        // ----------------------------------
-
-        const categoryFilter =
-            document.querySelector(
-                "#category-filter"
-            );
+        let html = "";
 
 
-        if (categoryFilter) {
+        // Previous
 
-            categoryFilter.addEventListener(
-                "change",
-                () => {
+        html += `
+            <button
+                class="btn btn-outline-primary pagination-btn"
+                data-page="${currentPage - 1}"
+                ${currentPage === 1 ? "disabled" : ""}
+            >
+                <i class="bi bi-chevron-left"></i>
+            </button>
+        `;
 
-                    filterByCategory(
-                        categoryFilter.value
-                    );
 
-                }
-            );
+        // Pages
+
+        for (
+            let page = 1;
+            page <= totalPages;
+            page++
+        ) {
+
+            html += `
+                <button
+                    class="btn ${
+                        page === currentPage
+                            ? "btn-primary"
+                            : "btn-outline-primary"
+                    } pagination-btn"
+                    data-page="${page}"
+                >
+                    ${page}
+                </button>
+            `;
+
         }
 
 
-        // ----------------------------------
-        // Sắp xếp
-        // ----------------------------------
+        // Next
 
-        const sortFilter =
-            document.querySelector(
-                "#sort-filter"
-            );
+        html += `
+            <button
+                class="btn btn-outline-primary pagination-btn"
+                data-page="${currentPage + 1}"
+                ${currentPage === totalPages ? "disabled" : ""}
+            >
+                <i class="bi bi-chevron-right"></i>
+            </button>
+        `;
 
 
-        if (sortFilter) {
+        pagination.innerHTML = html;
 
-            sortFilter.addEventListener(
-                "change",
-                () => {
 
-                    sortBooks(
-                        sortFilter.value
-                    );
+        document
+            .querySelectorAll(".pagination-btn")
+            .forEach(button => {
 
-                }
-            );
-        }
+                button.addEventListener(
+                    "click",
+                    () => {
+
+                        const page =
+                            Number(
+                                button.dataset.page
+                            );
+
+
+                        if (
+                            page < 1 ||
+                            page > totalPages
+                        ) {
+                            return;
+                        }
+
+
+                        currentPage = page;
+
+                        renderBooks();
+
+
+                        window.scrollTo({
+                            top: 0,
+                            behavior: "smooth"
+                        });
+
+                    }
+                );
+
+            });
 
     }
-);
+
+
+    // =========================================================
+    // EVENT FILTER
+    // =========================================================
+
+    if (searchInput) {
+
+        searchInput.addEventListener(
+            "input",
+            applyFilters
+        );
+
+    }
+
+
+    if (categoryFilter) {
+
+        categoryFilter.addEventListener(
+            "change",
+            applyFilters
+        );
+
+    }
+
+
+    if (sortFilter) {
+
+        sortFilter.addEventListener(
+            "change",
+            applyFilters
+        );
+
+    }
+
+
+    // =========================================================
+    // KHỞI CHẠY
+    // =========================================================
+
+    loadBooks();
+
+});
