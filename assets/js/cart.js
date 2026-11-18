@@ -1,219 +1,300 @@
 
-function validCartItems() {
-    return BookStore.cart().map(item => {
-        const book = BookStore.books.find(b => b.id === item.id);
-        return book ? { ...item, book } : null;
-    }).filter(Boolean);
-}
+const CartPage = {
+    items() {
+        return BookStore.cart().map(item => {
+            const book = BookStore.books.find(
+                b => Number(b.id) === Number(item.id)
+            );
 
-function cartTotal() {
-    return validCartItems().reduce(
-        (sum, item) => sum + item.book.price * item.quantity, 0
-    );
-}
+            if (!book) return null;
 
-function renderCart() {
-    const items = validCartItems();
+            return {
+                book,
+                quantity: Number(item.quantity)
+            };
+        }).filter(Boolean);
+    },
 
-    if (!items.length) {
-        $("#cart-items").html(`
-            <div class="empty-state">
-                <i class="bi bi-bag-x"></i>
-                <h4>Giỏ hàng đang trống</h4>
-                <p>Hãy khám phá và chọn những cuốn sách yêu thích.</p>
-                <a href="/pages/books.html" class="btn btn-primary">
-                    Khám phá sách
-                </a>
-            </div>
-        `);
-    } else {
-        $("#cart-items").html(items.map(({ book, quantity }) => `
-            <div class="cart-item">
-                <img src="${BookStore.escape(book.image)}"
-                    alt="${BookStore.escape(book.title)}">
+    total() {
+        return this.items().reduce(
+            (sum, item) =>
+                sum + Number(item.book.price) * item.quantity,
+            0
+        );
+    },
 
-                <div class="flex-grow-1">
-                    <a href="/pages/book-detail.html?id=${book.id}"
-                        class="fw-bold text-dark">
-                        ${BookStore.escape(book.title)}
+    render() {
+        const container = $("#cart-items");
+        if (!container.length) return;
+
+        const items = this.items();
+
+        if (!items.length) {
+            container.html(`
+                <div class="empty-state">
+                    <i class="bi bi-bag-x"></i>
+                    <h4>Giỏ hàng đang trống</h4>
+                    <p>Hãy chọn những cuốn sách yêu thích.</p>
+                    <a href="${BookStore.url("pages/books.html")}"
+                       class="btn btn-primary">
+                        Mua sách ngay
                     </a>
+                </div>
+            `);
+        } else {
+            container.html(items.map(({ book, quantity }) => `
+                <div class="cart-item">
+                    <img src="${BookStore.escape(BookStore.image(book))}"
+                         alt="${BookStore.escape(book.title)}">
 
-                    <p class="text-muted small mt-1">
-                        ${BookStore.escape(book.author)}
-                    </p>
+                    <div class="flex-grow-1">
+                        <a class="fw-bold text-dark"
+                           href="${BookStore.url(
+                               "pages/book-detail.html?id=" + book.id
+                           )}">
+                            ${BookStore.escape(book.title)}
+                        </a>
 
-                    <strong class="text-danger">
-                        ${BookStore.money(book.price)}
-                    </strong>
+                        <p class="text-muted small mt-1">
+                            ${BookStore.escape(book.author)}
+                        </p>
 
-                    <div class="d-flex align-items-center
-                        justify-content-between mt-3 flex-wrap gap-2">
-                        <div class="quantity-control">
-                            <button onclick="changeQuantity(${book.id}, -1)">
-                                <i class="bi bi-dash"></i>
-                            </button>
-                            <span>${quantity}</span>
-                            <button onclick="changeQuantity(${book.id}, 1)">
-                                <i class="bi bi-plus"></i>
+                        <strong class="text-danger">
+                            ${BookStore.money(book.price)}
+                        </strong>
+
+                        <div class="d-flex align-items-center
+                                    justify-content-between mt-3 gap-2">
+
+                            <div class="quantity-control">
+                                <button onclick="CartPage.changeQuantity(${book.id}, -1)">
+                                    <i class="bi bi-dash"></i>
+                                </button>
+
+                                <span>${quantity}</span>
+
+                                <button onclick="CartPage.changeQuantity(${book.id}, 1)">
+                                    <i class="bi bi-plus"></i>
+                                </button>
+                            </div>
+
+                            <button class="btn btn-sm btn-outline-danger"
+                                    onclick="CartPage.remove(${book.id})">
+                                <i class="bi bi-trash"></i>
+                                Xóa
                             </button>
                         </div>
-
-                        <button class="btn btn-sm btn-outline-danger"
-                            onclick="removeCartItem(${book.id})">
-                            <i class="bi bi-trash"></i> Xóa
-                        </button>
                     </div>
                 </div>
-            </div>
-        `).join(""));
-    }
+            `).join(""));
+        }
 
-    $("#cart-subtotal, #cart-total, #checkout-total")
-        .text(BookStore.money(cartTotal()));
-}
+        $("#cart-subtotal, #cart-total")
+            .text(BookStore.money(this.total()));
 
-function changeQuantity(id, delta) {
-    const cart = BookStore.cart();
-    const item = cart.find(i => i.id === id);
-    const book = BookStore.books.find(b => b.id === id);
+        const checkoutButton = $("#checkout-button");
 
-    if (!item || !book) return;
+        if (checkoutButton.length) {
+            checkoutButton.toggleClass("disabled", !items.length);
+            checkoutButton.attr("aria-disabled", String(!items.length));
+        }
 
-    const next = item.quantity + delta;
+        BookStore.updateCartCount();
+    },
 
-    if (next < 1) {
-        removeCartItem(id);
-        return;
-    }
+    changeQuantity(id, delta) {
+        const cart = BookStore.cart();
 
-    if (next > book.stock) {
-        BookStore.notify("Không đủ số lượng trong kho!", "error");
-        return;
-    }
+        const item = cart.find(
+            x => Number(x.id) === Number(id)
+        );
 
-    item.quantity = next;
-    BookStore.save(BookStore.cartKey(), cart);
-    BookStore.updateCartCount();
-    renderCart();
-}
+        const book = BookStore.books.find(
+            b => Number(b.id) === Number(id)
+        );
 
-function removeCartItem(id) {
-    const cart = BookStore.cart().filter(item => item.id !== id);
-    BookStore.save(BookStore.cartKey(), cart);
-    BookStore.updateCartCount();
-    renderCart();
-}
+        if (!item || !book) return;
 
-function renderCheckout() {
-    const user = BookStore.user();
-    if (!user) return;
+        const next = Number(item.quantity) + delta;
 
-    $("#customer-name").val(user.name);
-    $("#customer-email").val(user.email);
-
-    const items = validCartItems();
-
-    $("#checkout-items").html(items.map(({ book, quantity }) => `
-        <div class="summary-row">
-            <span>${BookStore.escape(book.title)} × ${quantity}</span>
-            <strong>${BookStore.money(book.price * quantity)}</strong>
-        </div>
-    `).join(""));
-
-    $("#checkout-total").text(BookStore.money(cartTotal()));
-}
-
-function placeOrder(event) {
-    event.preventDefault();
-
-    const user = BookStore.user();
-    if (!user) {
-        location.href = "/pages/login.html";
-        return;
-    }
-
-    const name = $("#customer-name").val().trim();
-    const phone = $("#customer-phone").val().trim();
-    const address = $("#customer-address").val().trim();
-    const note = $("#customer-note").val().trim();
-
-    if (name.length < 2 || !/^0\d{9}$/.test(phone) ||
-        address.length < 10) {
-        BookStore.notify("Thông tin nhận hàng chưa hợp lệ!", "error");
-        return;
-    }
-
-    const cart = BookStore.cart();
-
-    if (!cart.length) {
-        BookStore.notify("Giỏ hàng đang trống!", "error");
-        return;
-    }
-
-    let total = 0;
-    const items = [];
-
-    for (const item of cart) {
-        const book = BookStore.books.find(b => b.id === item.id);
-
-        if (!book || !Number.isInteger(item.quantity) ||
-            item.quantity < 1 || item.quantity > book.stock) {
-            BookStore.notify("Số lượng sách không hợp lệ!", "error");
+        if (next < 1) {
+            this.remove(id);
             return;
         }
 
-        total += book.price * item.quantity;
+        if (next > Number(book.stock)) {
+            BookStore.notify("Không đủ số lượng trong kho!", "error");
+            return;
+        }
 
-        items.push({
-            id: book.id,
-            title: book.title,
-            image: book.image,
-            price: book.price,
-            quantity: item.quantity
-        });
-    }
+        item.quantity = next;
 
-    const orders = BookStore.orders();
+        BookStore.save(BookStore.cartKey(), cart);
+        this.render();
+    },
 
-    const order = {
-        id: Date.now(),
-        userId: user.id,
-        customer: name,
-        email: user.email,
-        phone,
-        address,
-        note,
-        items,
-        total,
-        paymentMethod: "COD",
-        status: "Chờ xác nhận",
-        date: new Date().toLocaleString("vi-VN")
-    };
+    remove(id) {
+        const cart = BookStore.cart().filter(
+            item => Number(item.id) !== Number(id)
+        );
 
-    orders.push(order);
+        BookStore.save(BookStore.cartKey(), cart);
+        this.render();
+    },
 
-    BookStore.books.forEach(book => {
-        const item = cart.find(i => i.id === book.id);
-        if (item) book.stock -= item.quantity;
-    });
-
-    BookStore.save("books", BookStore.books);
-    BookStore.save("orders", orders);
-    BookStore.save(BookStore.cartKey(), []);
-
-    alert("Đặt hàng thành công! Mã đơn: #" + order.id);
-    location.href = "/pages/orders.html";
-}
-
-$(async function() {
-    await BookStore.ready;
-
-    if ($("#cart-items").length) renderCart();
-
-    if ($("#checkout-form").length) {
+    checkoutPage() {
         if (!BookStore.requireLogin()) return;
 
-        renderCheckout();
-        $("#checkout-form").on("submit", placeOrder);
+        const user = BookStore.user();
+        const items = this.items();
+
+        if (!items.length) {
+            location.replace(BookStore.url("pages/cart.html"));
+            return;
+        }
+
+        $("#customer-name").val(user.name);
+        $("#customer-email").val(user.email);
+
+        $("#checkout-items").html(items.map(({ book, quantity }) => `
+            <div class="summary-row">
+                <span>
+                    ${BookStore.escape(book.title)} × ${quantity}
+                </span>
+                <strong>
+                    ${BookStore.money(book.price * quantity)}
+                </strong>
+            </div>
+        `).join(""));
+
+        $("#checkout-total").text(BookStore.money(this.total()));
+    },
+
+    placeOrder(event) {
+        event.preventDefault();
+
+        const user = BookStore.user();
+
+        if (!user) {
+            location.href = BookStore.url("pages/login.html");
+            return;
+        }
+
+        if (user.role === "admin") {
+            BookStore.notify(
+                "Hãy đăng nhập tài khoản khách hàng để đặt sách.",
+                "error"
+            );
+            return;
+        }
+
+        const name = $("#customer-name").val().trim();
+        const phone = $("#customer-phone").val().trim();
+        const address = $("#customer-address").val().trim();
+        const note = $("#customer-note").val().trim();
+
+        if (name.length < 2) {
+            BookStore.notify("Họ tên không hợp lệ!", "error");
+            return;
+        }
+
+        if (!/^0\d{9}$/.test(phone)) {
+            BookStore.notify(
+                "Số điện thoại phải có 10 chữ số, bắt đầu bằng 0.",
+                "error"
+            );
+            return;
+        }
+
+        if (address.length < 10) {
+            BookStore.notify(
+                "Vui lòng nhập địa chỉ giao hàng đầy đủ.",
+                "error"
+            );
+            return;
+        }
+
+        const items = this.items();
+        const cart = BookStore.cart();
+
+        if (!items.length || items.length !== cart.length) {
+            BookStore.notify(
+                "Giỏ hàng có sản phẩm không hợp lệ.",
+                "error"
+            );
+            return;
+        }
+
+        for (const { book, quantity } of items) {
+            if (
+                !Number.isInteger(quantity) ||
+                quantity < 1 ||
+                quantity > Number(book.stock)
+            ) {
+                BookStore.notify(
+                    "Số lượng sách không hợp lệ hoặc hết hàng!",
+                    "error"
+                );
+                return;
+            }
+        }
+
+        const total = this.total();
+
+        const order = {
+            id: Date.now(),
+            userId: user.id,
+            customer: name,
+            email: user.email,
+            phone,
+            address,
+            note,
+            items: items.map(({ book, quantity }) => ({
+                id: book.id,
+                title: book.title,
+                image: BookStore.image(book),
+                price: Number(book.price),
+                quantity
+            })),
+            total,
+            paymentMethod: "COD",
+            status: "Chờ xác nhận",
+            date: new Date().toLocaleString("vi-VN")
+        };
+
+        const orders = BookStore.orders();
+        orders.push(order);
+
+        items.forEach(({ book, quantity }) => {
+            book.stock = Number(book.stock) - quantity;
+        });
+
+        BookStore.save("books", BookStore.books);
+        BookStore.save("orders", orders);
+        BookStore.save(BookStore.cartKey(), []);
+
+        alert(
+            "Đặt hàng thành công!\n" +
+            "Mã đơn hàng: #" + order.id + "\n" +
+            "Tổng tiền: " + BookStore.money(total)
+        );
+
+        location.href = BookStore.url("pages/orders.html");
+    }
+};
+
+$(async function () {
+    await BookStore.ready;
+
+    if ($("#cart-items").length) {
+        CartPage.render();
+    }
+
+    if ($("#checkout-form").length) {
+        CartPage.checkoutPage();
+
+        $("#checkout-form").on("submit", event => {
+            CartPage.placeOrder(event);
+        });
     }
 });
