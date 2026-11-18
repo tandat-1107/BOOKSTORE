@@ -1,0 +1,152 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bán sách cũ - BOOKSTORE</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+    <div id="header"></div>
+
+    <main class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-9">
+                <div class="mb-4">
+                    <span class="badge bg-primary mb-3">
+                        BOOKSTORE BUYBACK
+                    </span>
+
+                    <h1 class="section-title mb-2">
+                        <i class="bi bi-arrow-repeat"></i>
+                        Bán sách cũ cho BOOKSTORE
+                    </h1>
+
+                    <p class="text-muted">
+                        Gửi thông tin sách bạn muốn bán.
+                        Cửa hàng sẽ xem xét và đề xuất giá thu mua.
+                    </p>
+                </div>
+
+                <div class="cart-panel">
+                    <h5 class="fw-bold mb-4">
+                        Thông tin sách cần bán
+                    </h5>
+
+                    <form id="sell-book-form">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Tên sách
+                                </label>
+                                <input id="sell-title"
+                                    class="form-control"
+                                    placeholder="Nhập tên sách"
+                                    required>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Tác giả
+                                </label>
+                                <input id="sell-author"
+                                    class="form-control"
+                                    placeholder="Tên tác giả"
+                                    required>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Thể loại
+                                </label>
+                                <select id="sell-category"
+                                    class="form-select" required>
+                                    <option value="">Chọn thể loại</option>
+                                    <option>Văn học</option>
+                                    <option>Kỹ năng sống</option>
+                                    <option>Tiểu thuyết</option>
+                                    <option>Khoa học</option>
+                                    <option>Tâm lý học</option>
+                                    <option>Thiếu nhi</option>
+                                    <option>Khác</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Tình trạng sách
+                                </label>
+                                <select id="sell-condition"
+                                    class="form-select" required>
+                                    <option value="">Chọn tình trạng</option>
+                                    <option>Như mới (90–100%)</option>
+                                    <option>Tốt (70–89%)</option>
+                                    <option>Trung bình (50–69%)</option>
+                                    <option>Cũ, có hư hỏng nhẹ</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Giá mong muốn (VNĐ)
+                                </label>
+                                <input id="sell-price"
+                                    type="number" min="1000"
+                                    class="form-control"
+                                    placeholder="Ví dụ: 50000"
+                                    required>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Ảnh sách
+                                </label>
+                                <input id="sell-image"
+                                    type="file"
+                                    accept="image/*"
+                                    class="form-control">
+                                <small class="text-muted">
+                                    Ảnh tối đa 1MB
+                                </small>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label">
+                                    Mô tả thêm
+                                </label>
+                                <textarea id="sell-description"
+                                    class="form-control" rows="4"
+                                    placeholder="Sách có ghi chú, gấp trang, rách bìa hay không?"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-3 mt-4 flex-wrap">
+                            <button type="submit"
+                                class="btn btn-primary">
+                                <i class="bi bi-send"></i>
+                                Gửi yêu cầu thu mua
+                            </button>
+
+                            <a href="my-sell-requests.html"
+                                class="btn btn-outline-primary">
+                                Xem yêu cầu của tôi
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="footer"></div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/buyback.js"></script>
+</body>
+</html>
