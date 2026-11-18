@@ -5,13 +5,13 @@ function register(event) {
     const name = $("#name").val().trim();
     const email = $("#email").val().trim().toLowerCase();
     const password = $("#password").val();
-    const confirm = $("#confirm-password").val();
+    const confirmPassword = $("#confirm-password").val();
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
 
     if (name.length < 2) {
-        BookStore.notify("Họ tên cần ít nhất 2 ký tự!", "error");
+        BookStore.notify("Họ tên phải có ít nhất 2 ký tự!", "error");
         return;
     }
 
@@ -28,7 +28,7 @@ function register(event) {
         return;
     }
 
-    if (password !== confirm) {
+    if (password !== confirmPassword) {
         BookStore.notify("Mật khẩu xác nhận không khớp!", "error");
         return;
     }
@@ -40,8 +40,8 @@ function register(event) {
 
     const users = BookStore.get("users", []);
 
-    if (users.some(u => u.email === email)) {
-        BookStore.notify("Email đã được sử dụng!", "error");
+    if (users.some(user => user.email === email)) {
+        BookStore.notify("Email đã được đăng ký!", "error");
         return;
     }
 
@@ -54,8 +54,10 @@ function register(event) {
     });
 
     BookStore.save("users", users);
+
     alert("Đăng ký thành công!");
-    location.href = "/pages/login.html";
+
+    location.href = BookStore.url("pages/login.html");
 }
 
 function login(event) {
@@ -66,9 +68,11 @@ function login(event) {
 
     let user = null;
 
-    // Chỉ dành cho bản demo chạy trên máy cá nhân.
-    if (email === "admin@bookstore.com" &&
-        password === "Admin123") {
+    // Tài khoản quản trị dành cho demo frontend
+    if (
+        email === "admin@bookstore.com" &&
+        password === "Admin123"
+    ) {
         user = {
             id: 0,
             name: "Administrator",
@@ -93,20 +97,23 @@ function login(event) {
     }
 
     if (!user) {
-        BookStore.notify("Email hoặc mật khẩu không đúng!", "error");
+        BookStore.notify(
+            "Email hoặc mật khẩu không đúng!",
+            "error"
+        );
         return;
     }
 
     BookStore.save("currentUser", user);
 
     if (user.role === "admin") {
-        location.href = "/admin/dashboard.html";
+        location.href = BookStore.url("admin/dashboard.html");
     } else {
-        location.href = "/index.html";
+        location.href = BookStore.url("index.html");
     }
 }
 
-$(function() {
+$(function () {
     $("#register-form").on("submit", register);
     $("#login-form").on("submit", login);
 });

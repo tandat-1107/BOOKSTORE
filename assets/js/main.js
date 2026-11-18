@@ -3,6 +3,15 @@ const BookStore = {
     books: [],
     ready: null,
 
+    // Xác định đường dẫn gốc của website
+    base: location.hostname.endsWith("github.io")
+        ? "/BOOKSTORE"
+        : "",
+
+    url(path) {
+        return this.base + "/" + String(path).replace(/^\/+/, "");
+    },
+
     get(key, fallback = []) {
         try {
             const value = localStorage.getItem(key);
@@ -48,19 +57,25 @@ const BookStore = {
 
     async init() {
         try {
-            const response = await fetch("/data/books.json");
-            if (!response.ok) throw new Error("Không tải được books.json");
+            const response = await fetch(this.url("data/books.json"));
+
+            if (!response.ok) {
+                throw new Error("Không tải được books.json");
+            }
 
             const defaults = await response.json();
             const saved = this.get("books", null);
 
-            this.books = Array.isArray(saved) ? saved : defaults;
+            this.books = Array.isArray(saved)
+                ? saved
+                : defaults;
 
             if (!Array.isArray(saved)) {
                 this.save("books", defaults);
             }
+
         } catch (error) {
-            console.error(error);
+            console.error("Lỗi tải sách:", error);
             this.books = this.get("books", []);
         }
 
@@ -68,102 +83,184 @@ const BookStore = {
     },
 
     async loadLayout() {
+        const loadComponent = async (selector, path) => {
+            const element = document.querySelector(selector);
+            if (!element) return;
+
+            try {
+                const response = await fetch(this.url(path));
+
+                if (!response.ok) {
+                    throw new Error("Không tải được " + path);
+                }
+
+                element.innerHTML = await response.text();
+
+            } catch (error) {
+                console.error(error);
+            }
+        };
+
         await Promise.all([
-            new Promise(resolve =>
-                $("#header").load("/components/header.html", resolve)
-            ),
-            new Promise(resolve =>
-                $("#footer").load("/components/footer.html", resolve)
-            )
+            loadComponent("#header", "components/header.html"),
+            loadComponent("#footer", "components/footer.html")
         ]);
+
+        // Chuẩn hóa đường dẫn các liên kết
+        document.querySelectorAll(
+            "#header a[href^='/'], #footer a[href^='/']"
+        ).forEach(link => {
+            const href = link.getAttribute("href");
+            link.setAttribute("href", this.base + href);
+        });
+
+        this.renderAccountMenu();
+
+        const searchForm = document.getElementById("header-search-form");
+
+        if (searchForm) {
+            searchForm.addEventListener("submit", event => {
+                event.preventDefault();
+
+                const keyword = document
+                    .getElementById("header-keyword")
+                    .value.trim();
+
+                location.href = this.url(
+                    "pages/books.html?q=" +
+                    encodeURIComponent(keyword)
+                );
+            });
+        }
+
+        this.updateCartCount();
+    },
+
+    renderAccountMenu() {
+        const menu = document.getElementById("account-menu");
+        if (!menu) return;
 
         const user = this.user();
 
-        if (user) {
-            $("#account-menu").html(`
+        if (!user) {
+            menu.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                    <a href="${this.url("pages/login.html")}"
+                        class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        Đăng nhập
+                    </a>
+
+                    <a href="${this.url("pages/register.html")}"
+                        class="btn btn-primary btn-sm">
+                        <i class="bi bi-person-plus"></i>
+                        Đăng ký
+                    </a>
+                </div>
+            `;
+        } else {
+            menu.innerHTML = `
                 <div class="dropdown">
                     <button class="btn btn-light dropdown-toggle"
                         data-bs-toggle="dropdown">
                         <i class="bi bi-person-circle"></i>
                         ${this.escape(user.name)}
                     </button>
+
                     <ul class="dropdown-menu dropdown-menu-end">
-                        ${user.role === "admin" ? `
-                            <li>
-                                <a class="dropdown-item"
-                                    href="/admin/dashboard.html">
-                                    Quản trị
-                                </a>
-                            </li>
-                        ` : `
-                            <li>
-                                <a class="dropdown-item"
-                                    href="/pages/orders.html">
-                                    Đơn hàng của tôi
-                                </a>
-                            </li>
-                        `}
+                        ${
+                            user.role === "admin"
+                                ? `
+                                <li>
+                                    <a class="dropdown-item"
+                                        href="${this.url("admin/dashboard.html")}">
+                                        <i class="bi bi-speedometer2"></i>
+                                        Quản trị
+                                    </a>
+                                </li>
+                                `
+                                : `
+                                <li>
+                                    <a class="dropdown-item"
+                                        href="${this.url("pages/orders.html")}">
+                                        <i class="bi bi-receipt"></i>
+                                        Đơn hàng của tôi
+                                    </a>
+                                </li>
+                                `
+                        }
+
                         <li><hr class="dropdown-divider"></li>
+
                         <li>
-                            <button class="dropdown-item"
+                            <button class="dropdown-item text-danger"
                                 onclick="BookStore.logout()">
+                                <i class="bi bi-box-arrow-right"></i>
                                 Đăng xuất
                             </button>
                         </li>
                     </ul>
                 </div>
-            `);
+            `;
         }
 
-        $("#orders-nav").toggle(!!user && user.role !== "admin");
+        const ordersNav = document.getElementById("orders-nav");
 
-        $("#header-search-form").on("submit", function(event) {
-            event.preventDefault();
-            const keyword = $("#header-keyword").val().trim();
-            location.href =
-                "/pages/books.html?q=" + encodeURIComponent(keyword);
-        });
-
-        this.updateCartCount();
+        if (ordersNav) {
+            ordersNav.style.display =
+                user && user.role !== "admin"
+                    ? ""
+                    : "none";
+        }
     },
 
     updateCartCount() {
         const count = this.cart().reduce(
-            (total, item) => total + item.quantity, 0
+            (total, item) => total + Number(item.quantity || 0),
+            0
         );
 
-        $("#cart-count").text(count);
+        document.querySelectorAll("#cart-count").forEach(element => {
+            element.textContent = count;
+        });
     },
 
     notify(message, type = "success") {
-        const color = type === "success" ? "success" : "danger";
+        let area = document.getElementById("toast-area");
 
-        if (!$("#toast-area").length) {
-            $("body").append(`
-                <div id="toast-area"
-                    class="toast-container position-fixed top-0 end-0 p-3">
-                </div>
-            `);
+        if (!area) {
+            area = document.createElement("div");
+            area.id = "toast-area";
+            area.className =
+                "toast-container position-fixed top-0 end-0 p-3";
+            document.body.appendChild(area);
         }
 
-        const element = $(`
-            <div class="toast align-items-center text-bg-${color} border-0">
-                <div class="d-flex">
-                    <div class="toast-body"></div>
-                    <button type="button" class="btn-close btn-close-white
-                        me-2 m-auto" data-bs-dismiss="toast"></button>
-                </div>
+        const toastElement = document.createElement("div");
+        toastElement.className =
+            "toast align-items-center text-bg-" +
+            (type === "success" ? "success" : "danger") +
+            " border-0";
+
+        toastElement.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body"></div>
+                <button class="btn-close btn-close-white me-2 m-auto"
+                    data-bs-dismiss="toast"></button>
             </div>
-        `);
+        `;
 
-        element.find(".toast-body").text(message);
-        $("#toast-area").append(element);
+        toastElement.querySelector(".toast-body").textContent = message;
+        area.appendChild(toastElement);
 
-        const toast = new bootstrap.Toast(element[0], {
+        const toast = new bootstrap.Toast(toastElement, {
             delay: 2500
         });
 
-        element.on("hidden.bs.toast", () => element.remove());
+        toastElement.addEventListener("hidden.bs.toast", () => {
+            toastElement.remove();
+        });
+
         toast.show();
     },
 
@@ -188,7 +285,10 @@ const BookStore = {
         if (existing) {
             existing.quantity += quantity;
         } else {
-            cart.push({ id: book.id, quantity });
+            cart.push({
+                id: book.id,
+                quantity
+            });
         }
 
         this.save(this.cartKey(), cart);
@@ -198,22 +298,24 @@ const BookStore = {
 
     logout() {
         localStorage.removeItem("currentUser");
-        location.href = "/index.html";
+        location.href = this.url("index.html");
     },
 
     requireAdmin() {
         if (this.user()?.role !== "admin") {
-            location.replace("/pages/login.html");
+            location.replace(this.url("pages/login.html"));
             return false;
         }
+
         return true;
     },
 
     requireLogin() {
         if (!this.user()) {
-            location.replace("/pages/login.html");
+            location.replace(this.url("pages/login.html"));
             return false;
         }
+
         return true;
     }
 };
